@@ -1,0 +1,19 @@
+{
+  "ranges": {
+    "app": {
+      "start": 1000001,
+      "next": 1000002,
+      "end": 1999999
+    },
+    "default": {
+      "start": 2000001,
+      "next": 2000003,
+      "end": 9999999
+    }
+  },
+  "methods": {
+    "app.hello": 1000001,
+    "demo.ping": 2000001,
+    "demo.tick": 2000002
+  }
+}
