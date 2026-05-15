@@ -145,14 +145,14 @@ func TestServerHandlesAppHelloAndRunsSessionReadyHook(t *testing.T) {
 		AppName:  "app-host-demo",
 		Headless: true,
 		OnSessionReady: func(ctx CallContext) {
-			ctx.StartSessionTask("test.tick", func(taskCtx context.Context, notify NotifyFunc) {
+			ctx.StartSessionTask("test.children.updated", func(taskCtx context.Context, notify NotifyFunc) {
 				ticker := time.NewTicker(10 * time.Millisecond)
 				defer ticker.Stop()
 				select {
 				case <-taskCtx.Done():
 					return
 				case <-ticker.C:
-					_ = notify(Demo.Tick, map[string]any{"count": 1, "message": "tick"})
+					_ = notify(Folder.Children.Updated, map[string]any{"path": "C:\\tmp"})
 				}
 			})
 		},
@@ -183,16 +183,15 @@ func TestServerHandlesAppHelloAndRunsSessionReadyHook(t *testing.T) {
 		t.Fatalf("hello payload = %+v", helloPayload)
 	}
 
-	tick := readNotification(t, conn, Demo.Tick)
-	var tickPayload struct {
-		Count   int    `json:"count"`
-		Message string `json:"message"`
+	update := readNotification(t, conn, Folder.Children.Updated)
+	var updatePayload struct {
+		Path string `json:"path"`
 	}
-	if err := json.Unmarshal(tick.Payload, &tickPayload); err != nil {
-		t.Fatalf("decode tick payload: %v", err)
+	if err := json.Unmarshal(update.Payload, &updatePayload); err != nil {
+		t.Fatalf("decode update payload: %v", err)
 	}
-	if tickPayload.Count != 1 || tickPayload.Message != "tick" {
-		t.Fatalf("tick payload = %+v", tickPayload)
+	if updatePayload.Path != "C:\\tmp" {
+		t.Fatalf("update payload = %+v", updatePayload)
 	}
 }
 
@@ -201,18 +200,18 @@ func TestServerAllowsRegisteringHandlersAndSessionTasksByGeneratedMethod(t *test
 		AppName:  "app-host-demo",
 		Headless: true,
 	})
-	handler.RegisterHandler(Demo.Ping, func(ctx CallContext) (any, *RPCError) {
-		ctx.StartSessionTask("test.tick", func(taskCtx context.Context, notify NotifyFunc) {
+	handler.RegisterHandler(Folder.Session.Get, func(ctx CallContext) (any, *RPCError) {
+		ctx.StartSessionTask("test.children.updated", func(taskCtx context.Context, notify NotifyFunc) {
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
 			select {
 			case <-taskCtx.Done():
 				return
 			case <-ticker.C:
-				_ = notify(Demo.Tick, map[string]any{"count": 1, "message": "tick"})
+				_ = notify(Folder.Children.Updated, map[string]any{"path": "C:\\tmp"})
 			}
 		})
-		return map[string]any{"message": "custom"}, nil
+		return map[string]any{"session": "custom"}, nil
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -224,31 +223,30 @@ func TestServerAllowsRegisteringHandlersAndSessionTasksByGeneratedMethod(t *test
 	}
 	defer conn.Close()
 
-	writeJSON(t, conn, map[string]any{"id": 1, "method": Demo.Ping, "payload": map[string]any{}})
-	ping := readByID(t, conn, 1)
-	if ping.Error != nil {
-		t.Fatalf("ping error: %+v", ping.Error)
+	writeJSON(t, conn, map[string]any{"id": 1, "method": Folder.Session.Get, "payload": map[string]any{}})
+	session := readByID(t, conn, 1)
+	if session.Error != nil {
+		t.Fatalf("session error: %+v", session.Error)
 	}
-	var pingPayload struct {
-		Message string `json:"message"`
+	var sessionPayload struct {
+		Session string `json:"session"`
 	}
-	if err := json.Unmarshal(ping.Payload, &pingPayload); err != nil {
-		t.Fatalf("decode ping payload: %v", err)
+	if err := json.Unmarshal(session.Payload, &sessionPayload); err != nil {
+		t.Fatalf("decode session payload: %v", err)
 	}
-	if pingPayload.Message != "custom" {
-		t.Fatalf("ping payload = %+v", pingPayload)
+	if sessionPayload.Session != "custom" {
+		t.Fatalf("session payload = %+v", sessionPayload)
 	}
 
-	tick := readNotification(t, conn, Demo.Tick)
-	var tickPayload struct {
-		Count   int    `json:"count"`
-		Message string `json:"message"`
+	update := readNotification(t, conn, Folder.Children.Updated)
+	var updatePayload struct {
+		Path string `json:"path"`
 	}
-	if err := json.Unmarshal(tick.Payload, &tickPayload); err != nil {
-		t.Fatalf("decode tick payload: %v", err)
+	if err := json.Unmarshal(update.Payload, &updatePayload); err != nil {
+		t.Fatalf("decode update payload: %v", err)
 	}
-	if tickPayload.Count != 1 || tickPayload.Message != "tick" {
-		t.Fatalf("tick payload = %+v", tickPayload)
+	if updatePayload.Path != "C:\\tmp" {
+		t.Fatalf("update payload = %+v", updatePayload)
 	}
 }
 

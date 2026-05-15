@@ -11,8 +11,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func TestAppHandlerRegistersOnlyDemoMethodsOutsideBackendHandshake(t *testing.T) {
-	handler := newAppHandler(true, 10*time.Millisecond)
+func TestAppHandlerUsesSuperFolderIdentity(t *testing.T) {
+	handler := newAppHandler(true)
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -35,36 +35,10 @@ func TestAppHandlerRegistersOnlyDemoMethodsOutsideBackendHandshake(t *testing.T)
 	if err := json.Unmarshal(hello.Payload, &helloPayload); err != nil {
 		t.Fatalf("decode hello payload: %v", err)
 	}
-	if helloPayload.App != appName || !helloPayload.Headless {
+	if helloPayload.App != "superfolder" || !helloPayload.Headless {
 		t.Fatalf("hello payload = %+v", helloPayload)
 	}
 
-	writeJSON(t, conn, map[string]any{"id": 2, "method": backend.Demo.Ping, "payload": map[string]any{}})
-	ping := readByID(t, conn, 2)
-	if ping.Error != nil {
-		t.Fatalf("ping error: %+v", ping.Error)
-	}
-	var pingPayload struct {
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(ping.Payload, &pingPayload); err != nil {
-		t.Fatalf("decode ping payload: %v", err)
-	}
-	if pingPayload.Message != "pong" {
-		t.Fatalf("ping payload = %+v", pingPayload)
-	}
-
-	tick := readNotification(t, conn, backend.Demo.Tick)
-	var tickPayload struct {
-		Count   int    `json:"count"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(tick.Payload, &tickPayload); err != nil {
-		t.Fatalf("decode tick payload: %v", err)
-	}
-	if tickPayload.Count != 1 || tickPayload.Message != "tick" {
-		t.Fatalf("tick payload = %+v", tickPayload)
-	}
 }
 
 func writeJSON(t *testing.T, conn *websocket.Conn, value any) {

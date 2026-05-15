@@ -12,22 +12,160 @@ var App = struct {
 	Hello: 1000001,
 }
 
-var Demo = struct {
-	Ping Method
-	Tick Method
+var Folder = struct {
+	Children struct {
+		List    Method
+		Updated Method
+	}
+	Clipboard struct {
+		Paste Method
+		Set   Method
+	}
+	Favorites struct {
+		List   Method
+		Update Method
+	}
+	Menu struct {
+		Execute Method
+		List    Method
+	}
+	Open    Method
+	Session struct {
+		Get    Method
+		Update Method
+	}
 }{
-	Ping: 2000001,
-	Tick: 2000002,
+	Children: struct {
+		List    Method
+		Updated Method
+	}{
+		List:    2000005,
+		Updated: 2000011,
+	},
+	Clipboard: struct {
+		Paste Method
+		Set   Method
+	}{
+		Paste: 2000010,
+		Set:   2000009,
+	},
+	Favorites: struct {
+		List   Method
+		Update Method
+	}{
+		List:   2000003,
+		Update: 2000004,
+	},
+	Menu: struct {
+		Execute Method
+		List    Method
+	}{
+		Execute: 2000008,
+		List:    2000007,
+	},
+	Open: 2000006,
+	Session: struct {
+		Get    Method
+		Update Method
+	}{
+		Get:    2000001,
+		Update: 2000002,
+	},
+}
+
+var Git = struct {
+	Status struct {
+		Refresh Method
+		Updated Method
+	}
+	Summary struct {
+		Get Method
+	}
+}{
+	Status: struct {
+		Refresh Method
+		Updated Method
+	}{
+		Refresh: 2000016,
+		Updated: 2000018,
+	},
+	Summary: struct {
+		Get Method
+	}{
+		Get: 2000017,
+	},
+}
+
+var Job = struct {
+	Cancel   Method
+	Conflict struct {
+		Resolve Method
+	}
+	List    Method
+	Updated Method
+}{
+	Cancel: 2000013,
+	Conflict: struct {
+		Resolve Method
+	}{
+		Resolve: 2000014,
+	},
+	List:    2000012,
+	Updated: 2000015,
+}
+
+var Preview = struct {
+	Get     Method
+	Updated Method
+}{
+	Get:     2000019,
+	Updated: 2000020,
 }
 
 func MethodName(method Method) string {
 	switch method {
 	case App.Hello:
 		return "app.hello"
-	case Demo.Ping:
-		return "demo.ping"
-	case Demo.Tick:
-		return "demo.tick"
+	case Folder.Session.Get:
+		return "folder.session.get"
+	case Folder.Session.Update:
+		return "folder.session.update"
+	case Folder.Favorites.List:
+		return "folder.favorites.list"
+	case Folder.Favorites.Update:
+		return "folder.favorites.update"
+	case Folder.Children.List:
+		return "folder.children.list"
+	case Folder.Open:
+		return "folder.open"
+	case Folder.Menu.List:
+		return "folder.menu.list"
+	case Folder.Menu.Execute:
+		return "folder.menu.execute"
+	case Folder.Clipboard.Set:
+		return "folder.clipboard.set"
+	case Folder.Clipboard.Paste:
+		return "folder.clipboard.paste"
+	case Folder.Children.Updated:
+		return "folder.children.updated"
+	case Job.List:
+		return "job.list"
+	case Job.Cancel:
+		return "job.cancel"
+	case Job.Conflict.Resolve:
+		return "job.conflict.resolve"
+	case Job.Updated:
+		return "job.updated"
+	case Git.Status.Refresh:
+		return "git.status.refresh"
+	case Git.Summary.Get:
+		return "git.summary.get"
+	case Git.Status.Updated:
+		return "git.status.updated"
+	case Preview.Get:
+		return "preview.get"
+	case Preview.Updated:
+		return "preview.updated"
 	default:
 		return strconv.Itoa(int(method))
 	}

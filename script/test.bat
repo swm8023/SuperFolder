@@ -4,7 +4,7 @@ set "ROOT=%~dp0.."
 for %%I in ("%ROOT%") do set "ROOT=%%~fI"
 set "APP_DIR=%ROOT%\app"
 set "SERVICE_DIR=%ROOT%\service"
-set "EXE_PATH=%ROOT%\bin\app-host-demo.exe"
+set "EXE_PATH=%ROOT%\bin\superfolder.exe"
 
 if not exist "%APP_DIR%\node_modules\" (
   echo app\node_modules not found. Run script\setup.bat first.

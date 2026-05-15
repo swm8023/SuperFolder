@@ -7,13 +7,31 @@
     },
     "default": {
       "start": 2000001,
-      "next": 2000003,
+      "next": 2000021,
       "end": 9999999
     }
   },
   "methods": {
     "app.hello": 1000001,
-    "demo.ping": 2000001,
-    "demo.tick": 2000002
+    "folder.children.list": 2000005,
+    "folder.children.updated": 2000011,
+    "folder.clipboard.paste": 2000010,
+    "folder.clipboard.set": 2000009,
+    "folder.favorites.list": 2000003,
+    "folder.favorites.update": 2000004,
+    "folder.menu.execute": 2000008,
+    "folder.menu.list": 2000007,
+    "folder.open": 2000006,
+    "folder.session.get": 2000001,
+    "folder.session.update": 2000002,
+    "git.status.refresh": 2000016,
+    "git.status.updated": 2000018,
+    "git.summary.get": 2000017,
+    "job.cancel": 2000013,
+    "job.conflict.resolve": 2000014,
+    "job.list": 2000012,
+    "job.updated": 2000015,
+    "preview.get": 2000019,
+    "preview.updated": 2000020
   }
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDir, '..');
-const exePath = process.argv[2] || path.join(root, 'bin', 'app-host-demo.exe');
+const exePath = process.argv[2] || path.join(root, 'bin', 'superfolder.exe');
 const port = process.argv[3] || '18081';
 const bootUrl = `http://127.0.0.1:${port}/boot`;
 
@@ -57,7 +57,7 @@ const child = spawn(exePath, ['--headless', '--port', port], {
 
 try {
   const boot = await waitBoot(child);
-  if (boot.app !== 'app-host-demo') {
+  if (boot.app !== 'superfolder') {
     throw new Error(`unexpected boot app: ${boot.app}`);
   }
   if (boot.headless !== true) {

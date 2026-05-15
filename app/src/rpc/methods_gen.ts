@@ -4,16 +4,74 @@ export const rpc = {
   app: {
     hello: 1000001,
   },
-  demo: {
-    ping: 2000001,
-    tick: 2000002,
+  folder: {
+    children: {
+      list: 2000005,
+      updated: 2000011,
+    },
+    clipboard: {
+      paste: 2000010,
+      set: 2000009,
+    },
+    favorites: {
+      list: 2000003,
+      update: 2000004,
+    },
+    menu: {
+      execute: 2000008,
+      list: 2000007,
+    },
+    open: 2000006,
+    session: {
+      get: 2000001,
+      update: 2000002,
+    },
+  },
+  git: {
+    status: {
+      refresh: 2000016,
+      updated: 2000018,
+    },
+    summary: {
+      get: 2000017,
+    },
+  },
+  job: {
+    cancel: 2000013,
+    conflict: {
+      resolve: 2000014,
+    },
+    list: 2000012,
+    updated: 2000015,
+  },
+  preview: {
+    get: 2000019,
+    updated: 2000020,
   },
 } as const;
 
 const METHOD_NAMES = new Map<number, string>([
   [rpc.app.hello, 'app.hello'],
-  [rpc.demo.ping, 'demo.ping'],
-  [rpc.demo.tick, 'demo.tick'],
+  [rpc.folder.session.get, 'folder.session.get'],
+  [rpc.folder.session.update, 'folder.session.update'],
+  [rpc.folder.favorites.list, 'folder.favorites.list'],
+  [rpc.folder.favorites.update, 'folder.favorites.update'],
+  [rpc.folder.children.list, 'folder.children.list'],
+  [rpc.folder.open, 'folder.open'],
+  [rpc.folder.menu.list, 'folder.menu.list'],
+  [rpc.folder.menu.execute, 'folder.menu.execute'],
+  [rpc.folder.clipboard.set, 'folder.clipboard.set'],
+  [rpc.folder.clipboard.paste, 'folder.clipboard.paste'],
+  [rpc.folder.children.updated, 'folder.children.updated'],
+  [rpc.job.list, 'job.list'],
+  [rpc.job.cancel, 'job.cancel'],
+  [rpc.job.conflict.resolve, 'job.conflict.resolve'],
+  [rpc.job.updated, 'job.updated'],
+  [rpc.git.status.refresh, 'git.status.refresh'],
+  [rpc.git.summary.get, 'git.summary.get'],
+  [rpc.git.status.updated, 'git.status.updated'],
+  [rpc.preview.get, 'preview.get'],
+  [rpc.preview.updated, 'preview.updated'],
 ]);
 
 export function methodName(method: number): string {

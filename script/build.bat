@@ -9,7 +9,7 @@ set "EMBED_DIR=%BUILD_DIR%\embedweb"
 set "EMBED_APP_DIR=%EMBED_DIR%\app"
 set "SERVICE_BUILD_DIR=%BUILD_DIR%\service"
 set "BIN_DIR=%ROOT%\bin"
-set "EXE_PATH=%BIN_DIR%\app-host-demo.exe"
+set "EXE_PATH=%BIN_DIR%\superfolder.exe"
 
 if not exist "%APP_DIR%\node_modules\" (
   echo app\node_modules not found. Run script\setup.bat first.
@@ -82,7 +82,7 @@ go mod edit "-replace=apphostdemo/embedweb=../embedweb"
 if errorlevel 1 exit /b %ERRORLEVEL%
 go mod tidy
 if errorlevel 1 exit /b %ERRORLEVEL%
-go build -ldflags="-H windowsgui" -o "..\..\bin\app-host-demo.exe" .
+go build -ldflags="-H windowsgui" -o "..\..\bin\superfolder.exe" .
 if errorlevel 1 exit /b %ERRORLEVEL%
 popd
 
