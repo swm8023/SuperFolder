@@ -144,7 +144,7 @@ func NotificationMessage(method Method, payload any) Message {
 func NewServer(options ServerOptions) *Server {
 	appName := options.AppName
 	if appName == "" {
-		appName = "app-host-demo"
+		appName = "app"
 	}
 
 	staticFS := options.StaticFS

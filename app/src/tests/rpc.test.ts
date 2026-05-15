@@ -79,7 +79,7 @@ describe('classifyRpcMessage', () => {
     expect(classifyRpcMessage({ id: 0, method: rpc.folder.session.get, payload: {} })).toBe('invalid');
     expect(classifyRpcMessage({ id: 1, method: rpc.folder.session.get })).toBe('invalid');
     expect(classifyRpcMessage({ method: rpc.folder.children.updated })).toBe('invalid');
-    expect(classifyRpcMessage({ id: 1, method: 'demo.ping', payload: {} })).toBe('invalid');
+    expect(classifyRpcMessage({ id: 1, method: 'folder.session.get', payload: {} })).toBe('invalid');
   });
 });
 

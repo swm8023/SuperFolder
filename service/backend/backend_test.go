@@ -39,7 +39,7 @@ func TestClassifyMessage(t *testing.T) {
 
 func TestHeadlessRequiresExplicitPort(t *testing.T) {
 	err := Run([]string{"--headless"}, HostOptions{
-		AppName: "app-host-demo",
+		AppName: "test-app",
 		NewHandler: func(headless bool) http.Handler {
 			t.Fatal("handler should not be created when headless port is missing")
 			return nil
@@ -57,9 +57,9 @@ func TestHeadlessRequiresExplicitPort(t *testing.T) {
 func TestNonHeadlessLaunchesNativeUIAndReturnsWhenWindowCloses(t *testing.T) {
 	var launchedURL string
 	err := Run([]string{"--port", "0"}, HostOptions{
-		AppName: "app-host-demo",
+		AppName: "test-app",
 		NewHandler: func(headless bool) http.Handler {
-			return NewServer(ServerOptions{AppName: "app-host-demo", Headless: headless})
+			return NewServer(ServerOptions{AppName: "test-app", Headless: headless})
 		},
 		LaunchUI: func(url string) error {
 			launchedURL = url
@@ -92,13 +92,13 @@ func TestClassifyMessageRejectsInvalidShapes(t *testing.T) {
 		}
 	}
 
-	if _, err := DecodeMessage([]byte(`{"id":1,"method":"demo.ping","payload":{}}`)); err == nil {
+	if _, err := DecodeMessage([]byte(`{"id":1,"method":"folder.session.get","payload":{}}`)); err == nil {
 		t.Fatal("DecodeMessage accepted string method, want error")
 	}
 }
 
 func TestHealthAndBootHandlers(t *testing.T) {
-	server := httptest.NewServer(NewServer(ServerOptions{AppName: "app-host-demo", Headless: true}))
+	server := httptest.NewServer(NewServer(ServerOptions{AppName: "test-app", Headless: true}))
 	defer server.Close()
 
 	healthResp, err := http.Get(server.URL + "/healthz")
@@ -114,7 +114,7 @@ func TestHealthAndBootHandlers(t *testing.T) {
 	if err := json.NewDecoder(healthResp.Body).Decode(&health); err != nil {
 		t.Fatalf("decode health response: %v", err)
 	}
-	if !health.OK || health.App != "app-host-demo" {
+	if !health.OK || health.App != "test-app" {
 		t.Fatalf("health = %+v", health)
 	}
 
@@ -132,7 +132,7 @@ func TestHealthAndBootHandlers(t *testing.T) {
 	if err := json.NewDecoder(bootResp.Body).Decode(&boot); err != nil {
 		t.Fatalf("decode boot response: %v", err)
 	}
-	if boot.App != "app-host-demo" || !boot.Headless {
+	if boot.App != "test-app" || !boot.Headless {
 		t.Fatalf("boot = %+v", boot)
 	}
 	if !strings.HasPrefix(boot.RPCURL, "ws://") || !strings.HasSuffix(boot.RPCURL, "/ws") {
@@ -142,7 +142,7 @@ func TestHealthAndBootHandlers(t *testing.T) {
 
 func TestServerHandlesAppHelloAndRunsSessionReadyHook(t *testing.T) {
 	handler := NewServer(ServerOptions{
-		AppName:  "app-host-demo",
+		AppName:  "test-app",
 		Headless: true,
 		OnSessionReady: func(ctx CallContext) {
 			ctx.StartSessionTask("test.children.updated", func(taskCtx context.Context, notify NotifyFunc) {
@@ -179,7 +179,7 @@ func TestServerHandlesAppHelloAndRunsSessionReadyHook(t *testing.T) {
 	if err := json.Unmarshal(hello.Payload, &helloPayload); err != nil {
 		t.Fatalf("decode hello payload: %v", err)
 	}
-	if helloPayload.App != "app-host-demo" || !helloPayload.Headless {
+	if helloPayload.App != "test-app" || !helloPayload.Headless {
 		t.Fatalf("hello payload = %+v", helloPayload)
 	}
 
@@ -197,7 +197,7 @@ func TestServerHandlesAppHelloAndRunsSessionReadyHook(t *testing.T) {
 
 func TestServerAllowsRegisteringHandlersAndSessionTasksByGeneratedMethod(t *testing.T) {
 	handler := NewServer(ServerOptions{
-		AppName:  "app-host-demo",
+		AppName:  "test-app",
 		Headless: true,
 	})
 	handler.RegisterHandler(Folder.Session.Get, func(ctx CallContext) (any, *RPCError) {
