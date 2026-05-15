@@ -3,16 +3,24 @@ package main
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"apphostdemo/service/backend"
+	"apphostdemo/service/superfolder"
 	"github.com/gorilla/websocket"
 )
 
 func TestAppHandlerUsesSuperFolderIdentity(t *testing.T) {
-	handler := newAppHandler(true)
+	handler := newAppHandlerWithOptions(true, superfolder.Options{
+		ProfileDir:   t.TempDir(),
+		HomeDir:      filepath.Join(t.TempDir(), "Home"),
+		DesktopDir:   filepath.Join(t.TempDir(), "Desktop"),
+		DownloadsDir: filepath.Join(t.TempDir(), "Downloads"),
+		DocumentsDir: filepath.Join(t.TempDir(), "Documents"),
+	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -39,6 +47,11 @@ func TestAppHandlerUsesSuperFolderIdentity(t *testing.T) {
 		t.Fatalf("hello payload = %+v", helloPayload)
 	}
 
+	writeJSON(t, conn, map[string]any{"id": 2, "method": backend.Folder.Session.Get, "payload": map[string]any{}})
+	session := readByID(t, conn, 2)
+	if session.Error != nil {
+		t.Fatalf("session error: %+v", session.Error)
+	}
 }
 
 func writeJSON(t *testing.T, conn *websocket.Conn, value any) {
