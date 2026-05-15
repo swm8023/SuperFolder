@@ -106,6 +106,7 @@ func (g *GitService) loadSummary(path string) GitSummary {
 func runGitCommand(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	configureHiddenCommand(cmd)
 	output, err := cmd.Output()
 	return string(output), err
 }

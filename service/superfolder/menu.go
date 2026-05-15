@@ -1,10 +1,6 @@
 package superfolder
 
-import (
-	"os/exec"
-
-	"apphostdemo/service/backend"
-)
+import "apphostdemo/service/backend"
 
 func (a *App) MenuItems(context MenuContext) []MenuItem {
 	hasSelection := len(context.Selection) > 0
@@ -26,7 +22,7 @@ func (a *App) OpenPath(path string) *backend.RPCError {
 	if path == "" {
 		return &backend.RPCError{Code: ErrorPathNotFound, Message: "path is required"}
 	}
-	if err := exec.Command("cmd", "/c", "start", "", path).Start(); err != nil {
+	if err := openPathWithShell(path); err != nil {
 		return &backend.RPCError{Code: ErrorFileOperationFailed, Message: err.Error()}
 	}
 	return nil

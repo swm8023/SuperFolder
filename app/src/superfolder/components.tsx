@@ -285,9 +285,9 @@ function PreviewPanel({ preview, selectedPath }: { preview: PreviewResponse | nu
 export function JobQueue({ jobs, onCancel }: { jobs: JobSnapshot[]; onCancel: (jobId: string) => void }) {
   return (
     <aside className="sf-jobs">
-      <div className="sf-sidebar-title">Jobs</div>
+      <div className="sf-sidebar-title">后台任务</div>
       {jobs.length === 0 ? (
-        <div className="sf-empty">No jobs</div>
+        <div className="sf-empty">暂无后台任务</div>
       ) : (
         jobs.map((job) => (
           <div key={job.id} className="sf-job">
@@ -301,7 +301,7 @@ export function JobQueue({ jobs, onCancel }: { jobs: JobSnapshot[]; onCancel: (j
             {job.error ? <div className="sf-error">{job.error.message}</div> : null}
             {job.status === 'queued' || job.status === 'running' || job.status === 'waiting_conflict' ? (
               <button type="button" onClick={() => onCancel(job.id)}>
-                Cancel
+                取消
               </button>
             ) : null}
           </div>
