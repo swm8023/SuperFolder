@@ -37,6 +37,14 @@ export class SuperFolderApi {
     return this.rpcClient.call(rpc.folder.children.list, request) as Promise<ListChildrenResponse>;
   }
 
+  openPath(path: string): Promise<{ opened: string }> {
+    return this.rpcClient.call(rpc.folder.open, { path }) as Promise<{ opened: string }>;
+  }
+
+  executeMenu(command: string, selection: string[], targetDir = '', newName = ''): Promise<unknown> {
+    return this.rpcClient.call(rpc.folder.menu.execute, { command, selection, targetDir, newName });
+  }
+
   setClipboard(clipboard: ClipboardState): Promise<{ clipboard: ClipboardState }> {
     return this.rpcClient.call(rpc.folder.clipboard.set, clipboard) as Promise<{ clipboard: ClipboardState }>;
   }
@@ -51,6 +59,10 @@ export class SuperFolderApi {
 
   cancelJob(jobId: string): Promise<{ jobId: string }> {
     return this.rpcClient.call(rpc.job.cancel, { jobId }) as Promise<{ jobId: string }>;
+  }
+
+  resolveConflict(jobId: string, action: 'overwrite' | 'skip' | 'keep_both', applyToAll: boolean): Promise<{ jobId: string }> {
+    return this.rpcClient.call(rpc.job.conflict.resolve, { jobId, action, applyToAll }) as Promise<{ jobId: string }>;
   }
 
   refreshGitStatus(path: string): Promise<{ path: string }> {

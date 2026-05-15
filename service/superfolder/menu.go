@@ -1,6 +1,10 @@
 package superfolder
 
-import "apphostdemo/service/backend"
+import (
+	"os/exec"
+
+	"apphostdemo/service/backend"
+)
 
 func (a *App) MenuItems(context MenuContext) []MenuItem {
 	hasSelection := len(context.Selection) > 0
@@ -18,14 +22,34 @@ func (a *App) MenuItems(context MenuContext) []MenuItem {
 	}
 }
 
-func (a *App) ExecuteMenu(command string, selection []string, targetDir string) (any, *backend.RPCError) {
+func (a *App) OpenPath(path string) *backend.RPCError {
+	if path == "" {
+		return &backend.RPCError{Code: ErrorPathNotFound, Message: "path is required"}
+	}
+	if err := exec.Command("cmd", "/c", "start", "", path).Start(); err != nil {
+		return &backend.RPCError{Code: ErrorFileOperationFailed, Message: err.Error()}
+	}
+	return nil
+}
+
+func (a *App) ExecuteMenu(command string, selection []string, targetDir string, newName string) (any, *backend.RPCError) {
 	switch command {
+	case "open":
+		if len(selection) == 0 {
+			return nil, &backend.RPCError{Code: ErrorPathNotFound, Message: "open requires selection"}
+		}
+		if rpcErr := a.OpenPath(selection[0]); rpcErr != nil {
+			return nil, rpcErr
+		}
+		return map[string]any{"opened": selection[0]}, nil
 	case "copy":
 		return map[string]any{}, a.SetClipboard(ClipboardState{Mode: ClipboardModeCopy, Paths: selection})
 	case "cut":
 		return map[string]any{}, a.SetClipboard(ClipboardState{Mode: ClipboardModeCut, Paths: selection})
 	case "paste":
 		return a.PasteClipboard(targetDir)
+	case "rename":
+		return a.EnqueueJob(FileJobRequest{Kind: JobKindRename, Sources: selection, NewName: newName})
 	case "delete":
 		return a.EnqueueJob(FileJobRequest{Kind: JobKindDelete, Sources: selection, Permanent: false})
 	case "delete_permanent":

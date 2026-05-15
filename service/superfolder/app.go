@@ -156,6 +156,19 @@ func (a *App) Register(server *backend.Server) {
 		return ListChildren(req)
 	})
 
+	server.RegisterHandler(backend.Folder.Open, func(ctx backend.CallContext) (any, *backend.RPCError) {
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(ctx.Payload, &req); err != nil {
+			return nil, invalidPayload(err)
+		}
+		if rpcErr := a.OpenPath(req.Path); rpcErr != nil {
+			return nil, rpcErr
+		}
+		return map[string]any{"opened": req.Path}, nil
+	})
+
 	server.RegisterHandler(backend.Folder.Menu.List, func(ctx backend.CallContext) (any, *backend.RPCError) {
 		req, rpcErr := decodePayload[MenuContext](ctx.Payload)
 		if rpcErr != nil {
@@ -169,11 +182,12 @@ func (a *App) Register(server *backend.Server) {
 			Command   string   `json:"command"`
 			Selection []string `json:"selection"`
 			TargetDir string   `json:"targetDir"`
+			NewName   string   `json:"newName"`
 		}
 		if err := json.Unmarshal(ctx.Payload, &req); err != nil {
 			return nil, invalidPayload(err)
 		}
-		return a.ExecuteMenu(req.Command, req.Selection, req.TargetDir)
+		return a.ExecuteMenu(req.Command, req.Selection, req.TargetDir, req.NewName)
 	})
 
 	server.RegisterHandler(backend.Folder.Clipboard.Set, func(ctx backend.CallContext) (any, *backend.RPCError) {
