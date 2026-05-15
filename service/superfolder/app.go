@@ -8,6 +8,8 @@ import (
 )
 
 const ErrorSuperFolderInvalidPayload = 10000
+const ErrorPathNotFound = 10001
+const ErrorPathNotDirectory = 10002
 
 func NewApp(options Options) (*App, error) {
 	store, err := NewStore(options)
@@ -78,6 +80,14 @@ func (a *App) Register(server *backend.Server) {
 			return nil, toRPCError(err)
 		}
 		return map[string]any{"favorites": payload.Favorites}, nil
+	})
+
+	server.RegisterHandler(backend.Folder.Children.List, func(ctx backend.CallContext) (any, *backend.RPCError) {
+		req, rpcErr := decodePayload[ListChildrenRequest](ctx.Payload)
+		if rpcErr != nil {
+			return nil, rpcErr
+		}
+		return ListChildren(req)
 	})
 }
 

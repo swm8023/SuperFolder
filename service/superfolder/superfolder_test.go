@@ -13,6 +13,105 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func TestListChildrenReturnsDirectEntriesAndHash(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "file.txt"), "hello")
+	childDir := filepath.Join(root, "child")
+	if err := os.Mkdir(childDir, 0o755); err != nil {
+		t.Fatalf("mkdir child: %v", err)
+	}
+	mustWriteFile(t, filepath.Join(childDir, "nested.txt"), "nested")
+
+	response, rpcErr := ListChildren(ListChildrenRequest{
+		Path:          root,
+		SortKey:       SortKeyName,
+		SortDirection: SortDirectionAsc,
+	})
+	if rpcErr != nil {
+		t.Fatalf("ListChildren returned error: %+v", rpcErr)
+	}
+
+	if response.Path != root || response.Unchanged {
+		t.Fatalf("response metadata = %+v", response)
+	}
+	if response.ChildrenHash == "" {
+		t.Fatalf("children hash is empty")
+	}
+	if len(response.Entries) != 2 {
+		t.Fatalf("entries = %+v", response.Entries)
+	}
+	if response.Entries[0].Name != "child" || response.Entries[0].Kind != EntryKindDirectory || !response.Entries[0].HasChildren {
+		t.Fatalf("first entry = %+v", response.Entries[0])
+	}
+	if response.Entries[1].Name != "file.txt" || response.Entries[1].Kind != EntryKindFile || response.Entries[1].HasChildren {
+		t.Fatalf("second entry = %+v", response.Entries[1])
+	}
+}
+
+func TestListChildrenWithKnownHashReturnsUnchanged(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "file.txt"), "hello")
+
+	first, rpcErr := ListChildren(ListChildrenRequest{
+		Path:          root,
+		SortKey:       SortKeyName,
+		SortDirection: SortDirectionAsc,
+	})
+	if rpcErr != nil {
+		t.Fatalf("first ListChildren returned error: %+v", rpcErr)
+	}
+
+	second, rpcErr := ListChildren(ListChildrenRequest{
+		Path:          root,
+		KnownHash:     first.ChildrenHash,
+		SortKey:       SortKeyName,
+		SortDirection: SortDirectionAsc,
+	})
+	if rpcErr != nil {
+		t.Fatalf("second ListChildren returned error: %+v", rpcErr)
+	}
+	if !second.Unchanged {
+		t.Fatalf("expected unchanged response, got %+v", second)
+	}
+	if len(second.Entries) != 0 {
+		t.Fatalf("unchanged response should not include entries: %+v", second.Entries)
+	}
+}
+
+func TestListChildrenSortsAndFiltersOnBackend(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "alpha.txt"), "a")
+	mustWriteFile(t, filepath.Join(root, "beta.txt"), "bbbb")
+	mustWriteFile(t, filepath.Join(root, "gamma.log"), "ccc")
+
+	response, rpcErr := ListChildren(ListChildrenRequest{
+		Path:          root,
+		SortKey:       SortKeySize,
+		SortDirection: SortDirectionDesc,
+		FilterText:    ".txt",
+	})
+	if rpcErr != nil {
+		t.Fatalf("ListChildren returned error: %+v", rpcErr)
+	}
+	if got := entryNames(response.Entries); strings.Join(got, ",") != "beta.txt,alpha.txt" {
+		t.Fatalf("entry order = %#v", got)
+	}
+}
+
+func TestListChildrenRejectsNonDirectory(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "file.txt")
+	mustWriteFile(t, file, "hello")
+
+	_, rpcErr := ListChildren(ListChildrenRequest{Path: file})
+	if rpcErr == nil {
+		t.Fatal("ListChildren accepted a file path")
+	}
+	if rpcErr.Code != ErrorPathNotDirectory {
+		t.Fatalf("error = %+v", rpcErr)
+	}
+}
+
 func TestSessionDefaultsUseHomeAndDownloads(t *testing.T) {
 	app := newTestApp(t)
 
@@ -189,6 +288,21 @@ func favoriteNames(items []FavoriteItem) []string {
 		names = append(names, item.Name)
 	}
 	return names
+}
+
+func entryNames(entries []DirectoryEntry) []string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name)
+	}
+	return names
+}
+
+func mustWriteFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }
 
 func fileExists(path string) bool {

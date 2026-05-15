@@ -4,6 +4,7 @@ type ViewMode string
 type SortKey string
 type SortDirection string
 type FavoriteKind string
+type EntryKind string
 
 const (
 	ViewModeDetails ViewMode = "details"
@@ -19,6 +20,9 @@ const (
 	SortDirectionDesc SortDirection = "desc"
 
 	FavoriteKindFolder FavoriteKind = "folder"
+
+	EntryKindFile      EntryKind = "file"
+	EntryKindDirectory EntryKind = "directory"
 )
 
 type Options struct {
@@ -78,4 +82,32 @@ type UtilityPanelState struct {
 	Collapsed bool   `json:"collapsed"`
 	Height    int    `json:"height"`
 	ActiveTab string `json:"activeTab"`
+}
+
+type ListChildrenRequest struct {
+	Path          string        `json:"path"`
+	KnownHash     string        `json:"knownHash"`
+	ViewMode      ViewMode      `json:"viewMode"`
+	SortKey       SortKey       `json:"sortKey"`
+	SortDirection SortDirection `json:"sortDirection"`
+	FilterText    string        `json:"filterText"`
+}
+
+type ListChildrenResponse struct {
+	Path         string           `json:"path"`
+	Unchanged    bool             `json:"unchanged"`
+	ChildrenHash string           `json:"childrenHash"`
+	Entries      []DirectoryEntry `json:"entries,omitempty"`
+}
+
+type DirectoryEntry struct {
+	Name        string    `json:"name"`
+	Path        string    `json:"path"`
+	Kind        EntryKind `json:"kind"`
+	Size        int64     `json:"size"`
+	MTime       int64     `json:"mtime"`
+	Readonly    bool      `json:"readonly"`
+	Hidden      bool      `json:"hidden"`
+	System      bool      `json:"system"`
+	HasChildren bool      `json:"hasChildren"`
 }
