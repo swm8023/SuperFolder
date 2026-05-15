@@ -5,6 +5,10 @@ type SortKey string
 type SortDirection string
 type FavoriteKind string
 type EntryKind string
+type JobKind string
+type JobStatus string
+type ConflictAction string
+type ClipboardMode string
 
 const (
 	ViewModeDetails ViewMode = "details"
@@ -23,6 +27,26 @@ const (
 
 	EntryKindFile      EntryKind = "file"
 	EntryKindDirectory EntryKind = "directory"
+
+	JobKindCopy   JobKind = "copy"
+	JobKindMove   JobKind = "move"
+	JobKindDelete JobKind = "delete"
+	JobKindRename JobKind = "rename"
+
+	JobStatusQueued          JobStatus = "queued"
+	JobStatusRunning         JobStatus = "running"
+	JobStatusWaitingConflict JobStatus = "waiting_conflict"
+	JobStatusCancelling      JobStatus = "cancelling"
+	JobStatusCompleted       JobStatus = "completed"
+	JobStatusFailed          JobStatus = "failed"
+	JobStatusCancelled       JobStatus = "cancelled"
+
+	ConflictActionOverwrite ConflictAction = "overwrite"
+	ConflictActionSkip      ConflictAction = "skip"
+	ConflictActionKeepBoth  ConflictAction = "keep_both"
+
+	ClipboardModeCopy ClipboardMode = "copy"
+	ClipboardModeCut  ClipboardMode = "cut"
 )
 
 type Options struct {
@@ -31,11 +55,6 @@ type Options struct {
 	DesktopDir   string
 	DownloadsDir string
 	DocumentsDir string
-}
-
-type App struct {
-	options Options
-	store   *Store
 }
 
 type Config struct {
@@ -110,4 +129,60 @@ type DirectoryEntry struct {
 	Hidden      bool      `json:"hidden"`
 	System      bool      `json:"system"`
 	HasChildren bool      `json:"hasChildren"`
+}
+
+type FileJobRequest struct {
+	Kind      JobKind  `json:"kind"`
+	Sources   []string `json:"sources"`
+	TargetDir string   `json:"targetDir"`
+	NewName   string   `json:"newName"`
+	Permanent bool     `json:"permanent"`
+}
+
+type JobSnapshot struct {
+	ID        string         `json:"id"`
+	Kind      JobKind        `json:"kind"`
+	Status    JobStatus      `json:"status"`
+	Sources   []string       `json:"sources"`
+	TargetDir string         `json:"targetDir"`
+	NewName   string         `json:"newName"`
+	Total     int            `json:"total"`
+	Completed int            `json:"completed"`
+	Skipped   int            `json:"skipped"`
+	Error     *backendError  `json:"error,omitempty"`
+	Conflict  *ConflictState `json:"conflict,omitempty"`
+}
+
+type backendError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+type ConflictState struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+type ConflictResolution struct {
+	JobID      string         `json:"jobId"`
+	Action     ConflictAction `json:"action"`
+	ApplyToAll bool           `json:"applyToAll"`
+}
+
+type ClipboardState struct {
+	Mode         ClipboardMode `json:"mode"`
+	Paths        []string      `json:"paths"`
+	SourcePaneID string        `json:"sourcePaneId"`
+	SourceTabID  string        `json:"sourceTabId"`
+}
+
+type MenuContext struct {
+	Selection []string `json:"selection"`
+	CanPaste  bool     `json:"canPaste"`
+}
+
+type MenuItem struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Enabled bool   `json:"enabled"`
 }

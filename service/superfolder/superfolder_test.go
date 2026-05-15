@@ -251,6 +251,168 @@ func TestRegisterProvidesSessionAndFavoritesRPC(t *testing.T) {
 	}
 }
 
+func TestRenameJobRenamesFileAndCompletes(t *testing.T) {
+	app := newTestApp(t)
+	root := t.TempDir()
+	source := filepath.Join(root, "old.txt")
+	mustWriteFile(t, source, "content")
+
+	job, rpcErr := app.EnqueueJob(FileJobRequest{
+		Kind:    JobKindRename,
+		Sources: []string{source},
+		NewName: "new.txt",
+	})
+	if rpcErr != nil {
+		t.Fatalf("EnqueueJob returned error: %+v", rpcErr)
+	}
+
+	completed := waitJobStatus(t, app, job.ID, JobStatusCompleted)
+	if completed.Error != nil {
+		t.Fatalf("job error: %+v", completed.Error)
+	}
+	if fileExists(source) {
+		t.Fatalf("source still exists after rename")
+	}
+	if !fileExists(filepath.Join(root, "new.txt")) {
+		t.Fatalf("renamed file does not exist")
+	}
+}
+
+func TestCopyJobWaitsForConflictAndResolvesKeepBoth(t *testing.T) {
+	app := newTestApp(t)
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+	source := filepath.Join(sourceDir, "same.txt")
+	target := filepath.Join(targetDir, "same.txt")
+	mustWriteFile(t, source, "source")
+	mustWriteFile(t, target, "target")
+
+	job, rpcErr := app.EnqueueJob(FileJobRequest{
+		Kind:      JobKindCopy,
+		Sources:   []string{source},
+		TargetDir: targetDir,
+	})
+	if rpcErr != nil {
+		t.Fatalf("EnqueueJob returned error: %+v", rpcErr)
+	}
+
+	waiting := waitJobStatus(t, app, job.ID, JobStatusWaitingConflict)
+	if waiting.Conflict == nil || waiting.Conflict.Source != source || waiting.Conflict.Target != target {
+		t.Fatalf("conflict = %+v", waiting.Conflict)
+	}
+
+	if rpcErr := app.ResolveConflict(ConflictResolution{JobID: job.ID, Action: ConflictActionKeepBoth}); rpcErr != nil {
+		t.Fatalf("ResolveConflict returned error: %+v", rpcErr)
+	}
+	completed := waitJobStatus(t, app, job.ID, JobStatusCompleted)
+	if completed.Error != nil {
+		t.Fatalf("job error: %+v", completed.Error)
+	}
+	if readFile(t, target) != "target" {
+		t.Fatalf("existing target was overwritten")
+	}
+	if !fileExists(filepath.Join(targetDir, "same - Copy.txt")) {
+		t.Fatalf("keep-both copy was not created")
+	}
+}
+
+func TestMoveJobWaitsForConflictAndResolvesSkip(t *testing.T) {
+	app := newTestApp(t)
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+	source := filepath.Join(sourceDir, "same.txt")
+	target := filepath.Join(targetDir, "same.txt")
+	mustWriteFile(t, source, "source")
+	mustWriteFile(t, target, "target")
+
+	job, rpcErr := app.EnqueueJob(FileJobRequest{
+		Kind:      JobKindMove,
+		Sources:   []string{source},
+		TargetDir: targetDir,
+	})
+	if rpcErr != nil {
+		t.Fatalf("EnqueueJob returned error: %+v", rpcErr)
+	}
+	waitJobStatus(t, app, job.ID, JobStatusWaitingConflict)
+
+	if rpcErr := app.ResolveConflict(ConflictResolution{JobID: job.ID, Action: ConflictActionSkip}); rpcErr != nil {
+		t.Fatalf("ResolveConflict returned error: %+v", rpcErr)
+	}
+	completed := waitJobStatus(t, app, job.ID, JobStatusCompleted)
+	if completed.Completed != 1 || completed.Skipped != 1 {
+		t.Fatalf("completed job = %+v", completed)
+	}
+	if !fileExists(source) {
+		t.Fatalf("source should remain after skipped move")
+	}
+	if readFile(t, target) != "target" {
+		t.Fatalf("target changed after skipped move")
+	}
+}
+
+func TestJobQueueRunsSerially(t *testing.T) {
+	app := newTestApp(t)
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+	conflictSource := filepath.Join(sourceDir, "same.txt")
+	mustWriteFile(t, conflictSource, "source")
+	mustWriteFile(t, filepath.Join(targetDir, "same.txt"), "target")
+	renameSource := filepath.Join(sourceDir, "later.txt")
+	mustWriteFile(t, renameSource, "later")
+
+	first, rpcErr := app.EnqueueJob(FileJobRequest{Kind: JobKindCopy, Sources: []string{conflictSource}, TargetDir: targetDir})
+	if rpcErr != nil {
+		t.Fatalf("first EnqueueJob returned error: %+v", rpcErr)
+	}
+	second, rpcErr := app.EnqueueJob(FileJobRequest{Kind: JobKindRename, Sources: []string{renameSource}, NewName: "renamed.txt"})
+	if rpcErr != nil {
+		t.Fatalf("second EnqueueJob returned error: %+v", rpcErr)
+	}
+	waitJobStatus(t, app, first.ID, JobStatusWaitingConflict)
+	if got := getJob(t, app, second.ID); got.Status != JobStatusQueued {
+		t.Fatalf("second job status while first waits = %+v", got)
+	}
+
+	if rpcErr := app.ResolveConflict(ConflictResolution{JobID: first.ID, Action: ConflictActionSkip}); rpcErr != nil {
+		t.Fatalf("ResolveConflict returned error: %+v", rpcErr)
+	}
+	waitJobStatus(t, app, first.ID, JobStatusCompleted)
+	waitJobStatus(t, app, second.ID, JobStatusCompleted)
+	if !fileExists(filepath.Join(sourceDir, "renamed.txt")) {
+		t.Fatalf("second job did not run after first completed")
+	}
+}
+
+func TestClipboardPasteCreatesCopyOrMoveJob(t *testing.T) {
+	app := newTestApp(t)
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+	source := filepath.Join(sourceDir, "copy.txt")
+	mustWriteFile(t, source, "copy")
+
+	if rpcErr := app.SetClipboard(ClipboardState{Mode: ClipboardModeCopy, Paths: []string{source}, SourcePaneID: "pane-left", SourceTabID: "tab-left"}); rpcErr != nil {
+		t.Fatalf("SetClipboard returned error: %+v", rpcErr)
+	}
+	job, rpcErr := app.PasteClipboard(targetDir)
+	if rpcErr != nil {
+		t.Fatalf("PasteClipboard returned error: %+v", rpcErr)
+	}
+	waitJobStatus(t, app, job.ID, JobStatusCompleted)
+	if !fileExists(filepath.Join(targetDir, "copy.txt")) {
+		t.Fatalf("clipboard copy target missing")
+	}
+}
+
+func TestMenuListReturnsBuiltInItems(t *testing.T) {
+	app := newTestApp(t)
+	items := app.MenuItems(MenuContext{Selection: []string{"C:\\tmp\\file.txt"}, CanPaste: true})
+	ids := menuIDs(items)
+	want := []string{"open", "open_new_tab", "copy", "cut", "paste", "rename", "delete", "delete_permanent", "properties", "copy_path"}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Fatalf("menu ids = %#v, want %#v", ids, want)
+	}
+}
+
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 	return mustNewApp(t, Options{
@@ -303,6 +465,48 @@ func mustWriteFile(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func waitJobStatus(t *testing.T, app *App, id string, status JobStatus) JobSnapshot {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		job := getJob(t, app, id)
+		if job.Status == status {
+			return job
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("job %s did not reach status %s; last=%+v", id, status, getJob(t, app, id))
+	return JobSnapshot{}
+}
+
+func getJob(t *testing.T, app *App, id string) JobSnapshot {
+	t.Helper()
+	for _, job := range app.ListJobs() {
+		if job.ID == id {
+			return job
+		}
+	}
+	t.Fatalf("job %s not found in %+v", id, app.ListJobs())
+	return JobSnapshot{}
+}
+
+func menuIDs(items []MenuItem) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }
 
 func fileExists(path string) bool {
