@@ -1,6 +1,7 @@
 package superfolder
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,94 @@ import (
 	"apphostdemo/service/backend"
 	"github.com/gorilla/websocket"
 )
+
+func TestGitRefreshReturnsQuicklyAndUpdatesCacheAsync(t *testing.T) {
+	app := newTestApp(t)
+	app.git.runner = func(ctx context.Context, dir string, args ...string) (string, error) {
+		time.Sleep(50 * time.Millisecond)
+		switch strings.Join(args, " ") {
+		case "rev-parse --show-toplevel":
+			return "C:/repo\n", nil
+		case "branch --show-current":
+			return "main\n", nil
+		case "status --porcelain=v1":
+			return " M README.md\n?? new.txt\n", nil
+		case "log --oneline -n 5":
+			return "abc123 first commit\n", nil
+		default:
+			return "", nil
+		}
+	}
+
+	start := time.Now()
+	if rpcErr := app.RefreshGitStatus(GitStatusRefreshRequest{Path: "C:/repo/sub"}); rpcErr != nil {
+		t.Fatalf("RefreshGitStatus returned error: %+v", rpcErr)
+	}
+	if elapsed := time.Since(start); elapsed > 25*time.Millisecond {
+		t.Fatalf("RefreshGitStatus blocked for %s", elapsed)
+	}
+
+	summary := waitGitSummary(t, app, "C:/repo/sub", "main")
+	if summary.RepoRoot != filepath.Clean("C:/repo") || summary.Changed != 2 || len(summary.Logs) != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+}
+
+func TestGitSummaryHandlesNonRepo(t *testing.T) {
+	app := newTestApp(t)
+	summary := app.GitSummary("C:/not-repo")
+	if summary.IsRepo {
+		t.Fatalf("non-repo summary = %+v", summary)
+	}
+}
+
+func TestPreviewReadsFirst256KBOfText(t *testing.T) {
+	app := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "large.txt")
+	content := strings.Repeat("a", 300*1024)
+	mustWriteFile(t, path, content)
+
+	preview, rpcErr := app.GetPreview(PreviewRequest{Path: path})
+	if rpcErr != nil {
+		t.Fatalf("GetPreview returned error: %+v", rpcErr)
+	}
+	if preview.Kind != PreviewKindText || !preview.Truncated {
+		t.Fatalf("preview = %+v", preview)
+	}
+	if len(preview.Text) != 256*1024 {
+		t.Fatalf("text length = %d", len(preview.Text))
+	}
+}
+
+func TestPreviewRejectsLargeUnknownFile(t *testing.T) {
+	app := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "large.bin")
+	if err := os.WriteFile(path, bytesOfSize(300*1024), 0o644); err != nil {
+		t.Fatalf("write large bin: %v", err)
+	}
+
+	_, rpcErr := app.GetPreview(PreviewRequest{Path: path})
+	if rpcErr == nil {
+		t.Fatal("GetPreview accepted a large unknown file")
+	}
+	if rpcErr.Code != ErrorPreviewTooLarge {
+		t.Fatalf("preview error = %+v", rpcErr)
+	}
+}
+
+func TestPreviewClassifiesImageByExtension(t *testing.T) {
+	app := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "image.png")
+	mustWriteFile(t, path, "pngdata")
+
+	preview, rpcErr := app.GetPreview(PreviewRequest{Path: path})
+	if rpcErr != nil {
+		t.Fatalf("GetPreview returned error: %+v", rpcErr)
+	}
+	if preview.Kind != PreviewKindImage || preview.Mime != "image/png" || preview.DataURL == "" {
+		t.Fatalf("preview = %+v", preview)
+	}
+}
 
 func TestListChildrenReturnsDirectEntriesAndHash(t *testing.T) {
 	root := t.TempDir()
@@ -507,6 +596,28 @@ func menuIDs(items []MenuItem) []string {
 		ids = append(ids, item.ID)
 	}
 	return ids
+}
+
+func bytesOfSize(size int) []byte {
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = byte(i % 251)
+	}
+	return data
+}
+
+func waitGitSummary(t *testing.T, app *App, path string, branch string) GitSummary {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		summary := app.GitSummary(path)
+		if summary.Branch == branch {
+			return summary
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("git summary for %s did not reach branch %s; last=%+v", path, branch, app.GitSummary(path))
+	return GitSummary{}
 }
 
 func fileExists(path string) bool {

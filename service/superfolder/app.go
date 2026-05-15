@@ -11,12 +11,14 @@ import (
 const ErrorSuperFolderInvalidPayload = 10000
 const ErrorPathNotFound = 10001
 const ErrorPathNotDirectory = 10002
+const ErrorPreviewTooLarge = 10030
 
 type App struct {
 	mu        sync.Mutex
 	options   Options
 	store     *Store
 	jobs      *JobManager
+	git       *GitService
 	clipboard ClipboardState
 }
 
@@ -25,7 +27,7 @@ func NewApp(options Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &App{options: store.options, store: store, jobs: NewJobManager()}, nil
+	return &App{options: store.options, store: store, jobs: NewJobManager(), git: NewGitService()}, nil
 }
 
 func (a *App) GetSession() (SessionState, error) {
@@ -75,6 +77,18 @@ func (a *App) SetClipboard(clipboard ClipboardState) *backend.RPCError {
 	a.clipboard = clipboard
 	a.mu.Unlock()
 	return nil
+}
+
+func (a *App) RefreshGitStatus(req GitStatusRefreshRequest) *backend.RPCError {
+	return a.git.Refresh(req.Path)
+}
+
+func (a *App) GitSummary(path string) GitSummary {
+	return a.git.Summary(path)
+}
+
+func (a *App) GetPreview(req PreviewRequest) (PreviewResponse, *backend.RPCError) {
+	return GetPreview(req)
 }
 
 func (a *App) PasteClipboard(targetDir string) (JobSnapshot, *backend.RPCError) {
@@ -213,6 +227,39 @@ func (a *App) Register(server *backend.Server) {
 			return nil, rpcErr
 		}
 		return map[string]any{"jobId": req.JobID}, nil
+	})
+
+	server.RegisterHandler(backend.Git.Status.Refresh, func(ctx backend.CallContext) (any, *backend.RPCError) {
+		req, rpcErr := decodePayload[GitStatusRefreshRequest](ctx.Payload)
+		if rpcErr != nil {
+			return nil, rpcErr
+		}
+		if rpcErr := a.RefreshGitStatus(req); rpcErr != nil {
+			return nil, rpcErr
+		}
+		return map[string]any{"path": req.Path}, nil
+	})
+
+	server.RegisterHandler(backend.Git.Summary.Get, func(ctx backend.CallContext) (any, *backend.RPCError) {
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(ctx.Payload, &req); err != nil {
+			return nil, invalidPayload(err)
+		}
+		return map[string]any{"summary": a.GitSummary(req.Path)}, nil
+	})
+
+	server.RegisterHandler(backend.Preview.Get, func(ctx backend.CallContext) (any, *backend.RPCError) {
+		req, rpcErr := decodePayload[PreviewRequest](ctx.Payload)
+		if rpcErr != nil {
+			return nil, rpcErr
+		}
+		preview, rpcErr := a.GetPreview(req)
+		if rpcErr != nil {
+			return nil, rpcErr
+		}
+		return map[string]any{"preview": preview}, nil
 	})
 }
 

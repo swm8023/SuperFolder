@@ -9,6 +9,7 @@ type JobKind string
 type JobStatus string
 type ConflictAction string
 type ClipboardMode string
+type PreviewKind string
 
 const (
 	ViewModeDetails ViewMode = "details"
@@ -47,6 +48,9 @@ const (
 
 	ClipboardModeCopy ClipboardMode = "copy"
 	ClipboardModeCut  ClipboardMode = "cut"
+
+	PreviewKindText  PreviewKind = "text"
+	PreviewKindImage PreviewKind = "image"
 )
 
 type Options struct {
@@ -185,4 +189,36 @@ type MenuItem struct {
 	ID      string `json:"id"`
 	Label   string `json:"label"`
 	Enabled bool   `json:"enabled"`
+}
+
+type GitStatusRefreshRequest struct {
+	Path string `json:"path"`
+}
+
+type GitSummary struct {
+	Path     string        `json:"path"`
+	IsRepo   bool          `json:"isRepo"`
+	RepoRoot string        `json:"repoRoot"`
+	Branch   string        `json:"branch"`
+	Changed  int           `json:"changed"`
+	Logs     []GitLogEntry `json:"logs"`
+	Error    string        `json:"error,omitempty"`
+}
+
+type GitLogEntry struct {
+	Hash    string `json:"hash"`
+	Subject string `json:"subject"`
+}
+
+type PreviewRequest struct {
+	Path string `json:"path"`
+}
+
+type PreviewResponse struct {
+	Path      string      `json:"path"`
+	Kind      PreviewKind `json:"kind"`
+	Mime      string      `json:"mime"`
+	Text      string      `json:"text,omitempty"`
+	DataURL   string      `json:"dataUrl,omitempty"`
+	Truncated bool        `json:"truncated"`
 }
