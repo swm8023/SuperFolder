@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { rpc } from '../rpc/rpc';
 import { SuperFolderApi } from '../superfolder/api';
+import { entryPresentation, formatEntrySize, formatEntryTime } from '../superfolder/presentation';
 import { createInitialViewState, superFolderReducer } from '../superfolder/state';
 import { mapKeyboardShortcut } from '../superfolder/shortcuts';
-import { SessionState, ViewMode } from '../superfolder/types';
+import { DirectoryEntry, SessionState, ViewMode } from '../superfolder/types';
 
 const session: SessionState = {
   version: 1,
@@ -33,6 +34,51 @@ const session: SessionState = {
     },
   ],
 };
+
+const directoryEntry: DirectoryEntry = {
+  name: 'src',
+  path: 'C:\\Users\\me\\src',
+  kind: 'directory',
+  size: 0,
+  mtime: Date.UTC(2026, 4, 16, 1, 2, 3),
+  readonly: true,
+  hidden: true,
+  system: false,
+  hasChildren: true,
+};
+
+const fileEntry: DirectoryEntry = {
+  name: 'report.txt',
+  path: 'C:\\Users\\me\\report.txt',
+  kind: 'file',
+  size: 1536,
+  mtime: Date.UTC(2026, 4, 16, 1, 2, 3),
+  readonly: false,
+  hidden: false,
+  system: false,
+  hasChildren: false,
+};
+
+describe('presentation helpers', () => {
+  test('classifies directory and file display metadata', () => {
+    expect(entryPresentation(directoryEntry)).toEqual({
+      icon: 'folder',
+      kindLabel: 'Folder',
+      badges: ['Hidden', 'Read-only'],
+    });
+    expect(entryPresentation(fileEntry)).toEqual({
+      icon: 'file',
+      kindLabel: 'TXT File',
+      badges: [],
+    });
+  });
+
+  test('formats directory size and file timestamps for compact rows', () => {
+    expect(formatEntrySize(directoryEntry)).toBe('--');
+    expect(formatEntrySize(fileEntry)).toBe('1.5 KB');
+    expect(formatEntryTime(fileEntry, 'en-US')).toContain('2026');
+  });
+});
 
 describe('superFolderReducer', () => {
   test('stores changed children by path and keeps existing children on unchanged response', () => {

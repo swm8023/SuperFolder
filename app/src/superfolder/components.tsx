@@ -1,14 +1,32 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
+import {
+  ChevronRight,
+  File as FileIcon,
+  Folder as FolderIcon,
+  Grid2X2,
+  List,
+  ListTree,
+  Plus,
+  RefreshCw,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { CSSProperties, MouseEvent, useRef } from 'react';
+import { entryPresentation, formatEntrySize, formatEntryTime } from './presentation';
 import { DirectoryEntry, FavoriteItem, GitSummary, JobSnapshot, ListChildrenRequest, PaneState, PreviewResponse, SessionState, ViewMode } from './types';
 
 export function Sidebar({ favorites, onOpen }: { favorites: FavoriteItem[]; onOpen: (path: string) => void }) {
   return (
     <aside className="sf-sidebar">
-      <div className="sf-sidebar-title">Favorites</div>
+      <div className="sf-sidebar-title">收藏目录</div>
       <div className="sf-favorites">
         {favorites.map((favorite) => (
           <button key={favorite.id} type="button" className="sf-favorite" onClick={() => onOpen(favorite.path)} title={favorite.path}>
-            <span className="sf-file-icon">DIR</span>
-            <span>{favorite.name}</span>
+            <span className="sf-entry-icon folder compact">
+              <FolderIcon size={15} />
+            </span>
+            <span className="sf-favorite-label">{favorite.name}</span>
+            <span className="sf-favorite-path">{favorite.path}</span>
           </button>
         ))}
       </div>
@@ -34,7 +52,7 @@ export interface BrowserPaneProps {
   onNewTab: () => void;
   onCloseTab: (tabId: string) => void;
   onActivateTab: (tabId: string) => void;
-  onContextMenu: (event: React.MouseEvent, entry?: DirectoryEntry) => void;
+  onContextMenu: (event: MouseEvent, entry?: DirectoryEntry) => void;
 }
 
 export function BrowserPane(props: BrowserPaneProps) {
@@ -58,18 +76,19 @@ export function BrowserPane(props: BrowserPaneProps) {
             {props.pane.tabs.length > 1 ? (
               <span
                 className="sf-tab-close"
+                title="Close tab"
                 onClick={(event) => {
                   event.stopPropagation();
                   props.onCloseTab(tab.id);
                 }}
               >
-                x
+                <X size={13} />
               </span>
             ) : null}
           </button>
         ))}
-        <button type="button" className="sf-tab add" onClick={props.onNewTab}>
-          +
+        <button type="button" className="sf-tab add" onClick={props.onNewTab} title="New tab">
+          <Plus size={15} />
         </button>
       </div>
 
@@ -85,14 +104,15 @@ export function BrowserPane(props: BrowserPaneProps) {
         <input name="path" defaultValue={activeTab.path} key={activeTab.path} spellCheck={false} />
         <button type="submit">Go</button>
         <button type="button" onClick={props.onRefresh}>
+          <RefreshCw size={14} />
           Refresh
         </button>
       </form>
 
       <div className="sf-pane-toolbar">
-        <ViewButton label="Details" mode="details" active={activeTab.viewMode === 'details'} onClick={props.onViewModeChange} />
-        <ViewButton label="Tiles" mode="tiles" active={activeTab.viewMode === 'tiles'} onClick={props.onViewModeChange} />
-        <ViewButton label="Tree" mode="tree" active={activeTab.viewMode === 'tree'} onClick={props.onViewModeChange} />
+        <ViewButton label="Details" icon={List} mode="details" active={activeTab.viewMode === 'details'} onClick={props.onViewModeChange} />
+        <ViewButton label="Tiles" icon={Grid2X2} mode="tiles" active={activeTab.viewMode === 'tiles'} onClick={props.onViewModeChange} />
+        <ViewButton label="Tree" icon={ListTree} mode="tree" active={activeTab.viewMode === 'tree'} onClick={props.onViewModeChange} />
         {props.loading ? <span className="sf-muted">Loading</span> : null}
       </div>
 
@@ -101,42 +121,80 @@ export function BrowserPane(props: BrowserPaneProps) {
   );
 }
 
-function ViewButton({ label, mode, active, onClick }: { label: string; mode: ViewMode; active: boolean; onClick: (mode: ViewMode) => void }) {
+function ViewButton({
+  label,
+  icon: Icon,
+  mode,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: LucideIcon;
+  mode: ViewMode;
+  active: boolean;
+  onClick: (mode: ViewMode) => void;
+}) {
   return (
-    <button type="button" className={active ? 'sf-tool active' : 'sf-tool'} onClick={() => onClick(mode)}>
+    <button type="button" className={active ? 'sf-tool active' : 'sf-tool'} onClick={() => onClick(mode)} title={label}>
+      <Icon size={15} />
       {label}
     </button>
   );
 }
 
 function DetailsView(props: BrowserPaneProps) {
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: props.entries.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 32,
+    overscan: 16,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
   return (
-    <div className="sf-details" role="grid">
+    <div className="sf-details" role="grid" ref={parentRef}>
       <div className="sf-row header">
         <span>Name</span>
         <span>Kind</span>
         <span>Size</span>
         <span>Modified</span>
       </div>
-      {props.entries.map((entry) => (
-        <EntryRow key={entry.path} entry={entry} {...props} />
-      ))}
+      {props.entries.length === 0 ? <div className="sf-empty sf-list-empty">This folder is empty.</div> : null}
+      <div className="sf-virtual-body" style={{ height: rowVirtualizer.getTotalSize() }}>
+        {virtualRows.map((virtualRow) => {
+          const entry = props.entries[virtualRow.index];
+          return (
+            <EntryRow
+              key={entry.path}
+              entry={entry}
+              rowStyle={{
+                height: virtualRow.size,
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+              {...props}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function EntryRow(props: BrowserPaneProps & { entry: DirectoryEntry }) {
+function EntryRow(props: BrowserPaneProps & { entry: DirectoryEntry; rowStyle?: CSSProperties }) {
   const selected = props.selectedPaths.includes(props.entry.path);
+  const presentation = entryPresentation(props.entry);
   return (
     <div
       className={selected ? 'sf-row selected' : 'sf-row'}
+      style={props.rowStyle}
       onClick={(event) => props.onSelect(props.entry, event)}
       onDoubleClick={() => props.onOpen(props.entry)}
       onContextMenu={(event) => props.onContextMenu(event, props.entry)}
       role="row"
     >
       <span className="sf-name-cell">
-        <span className="sf-file-icon">{props.entry.kind === 'directory' ? 'DIR' : 'FILE'}</span>
+        <EntryGlyph entry={props.entry} />
         {props.editingPath === props.entry.path ? (
           <input
             className="sf-inline-edit"
@@ -150,12 +208,21 @@ function EntryRow(props: BrowserPaneProps & { entry: DirectoryEntry }) {
             }}
           />
         ) : (
-          props.entry.name
+          <>
+            <span className="sf-entry-name" title={props.entry.path}>
+              {props.entry.name}
+            </span>
+            {presentation.badges.map((badge) => (
+              <span key={badge} className="sf-entry-badge">
+                {badge}
+              </span>
+            ))}
+          </>
         )}
       </span>
-      <span>{props.entry.kind}</span>
-      <span>{props.entry.kind === 'directory' ? '-' : formatSize(props.entry.size)}</span>
-      <span>{formatTime(props.entry.mtime)}</span>
+      <span className="sf-kind-cell">{presentation.kindLabel}</span>
+      <span className="sf-size-cell">{formatEntrySize(props.entry)}</span>
+      <span className="sf-time-cell">{formatEntryTime(props.entry)}</span>
     </div>
   );
 }
@@ -173,8 +240,9 @@ function TilesView(props: BrowserPaneProps) {
           onContextMenu={(event) => props.onContextMenu(event, entry)}
           title={entry.path}
         >
-          <span className="sf-tile-icon">{entry.kind === 'directory' ? 'DIR' : 'FILE'}</span>
-          <span>{entry.name}</span>
+          <EntryGlyph entry={entry} size="large" />
+          <span className="sf-tile-name">{entry.name}</span>
+          <span className="sf-tile-meta">{entryPresentation(entry).kindLabel}</span>
         </button>
       ))}
     </div>
@@ -193,11 +261,23 @@ function TreeView(props: BrowserPaneProps) {
           onDoubleClick={() => props.onOpen(entry)}
           onContextMenu={(event) => props.onContextMenu(event, entry)}
         >
-          <span>{entry.kind === 'directory' ? '>' : '-'}</span>
-          <span>{entry.name}</span>
+          <span className="sf-tree-expander">{entry.kind === 'directory' ? <ChevronRight size={14} /> : null}</span>
+          <EntryGlyph entry={entry} />
+          <span className="sf-tree-name">{entry.name}</span>
+          <span className="sf-tree-meta">{entryPresentation(entry).kindLabel}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+function EntryGlyph({ entry, size = 'normal' }: { entry: DirectoryEntry; size?: 'compact' | 'normal' | 'large' }) {
+  const presentation = entryPresentation(entry);
+  const Icon = presentation.icon === 'folder' ? FolderIcon : FileIcon;
+  return (
+    <span className={`sf-entry-icon ${presentation.icon} ${size}`}>
+      <Icon size={size === 'large' ? 28 : 16} />
+    </span>
   );
 }
 
@@ -385,15 +465,4 @@ export function requestForTab(path: string, viewMode: ViewMode, knownHash?: stri
     sortDirection: 'asc',
     filterText: '',
   };
-}
-
-function formatSize(size: number) {
-  if (size < 1024) return String(size);
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${Math.round(size / 1024 / 1024)} MB`;
-}
-
-function formatTime(mtime: number) {
-  if (!mtime) return '-';
-  return new Date(mtime).toLocaleString();
 }
