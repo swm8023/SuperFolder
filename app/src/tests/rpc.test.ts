@@ -43,6 +43,28 @@ class FakeWebSocket {
   }
 }
 
+class RaceOpenWebSocket {
+  sent: unknown[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  private reads = 0;
+
+  constructor(readonly url: string) {}
+
+  get readyState() {
+    this.reads += 1;
+    return this.reads <= 2 ? FakeWebSocket.CONNECTING : FakeWebSocket.OPEN;
+  }
+
+  send(data: string) {
+    this.sent.push(JSON.parse(data));
+  }
+
+  close() {}
+}
+
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
@@ -159,6 +181,52 @@ describe('RpcClient', () => {
 
     await expect(pending).rejects.toMatchObject({ code: ERROR_CONNECTION_LOST });
     expect(client.status).toBe('disconnected');
+    client.stop();
+  });
+
+  test('sends app.hello when websocket opens between readyState check and onopen assignment', async () => {
+    let socket: RaceOpenWebSocket | undefined;
+    const client = new RpcClient({
+      serviceUrl: 'http://127.0.0.1:5173',
+      createWebSocket: (url) => {
+        socket = new RaceOpenWebSocket(url);
+        return socket;
+      },
+      reconnectIntervalMs: 1,
+      reconnectFailureThreshold: 1,
+    });
+
+    void client.start().catch(() => undefined);
+    await waitFor(() => (socket?.sent.length ?? 0) > 0);
+
+    expect(socket?.sent[0]).toEqual({ id: 1, method: rpc.app.hello, payload: {} });
+    client.stop();
+  });
+
+  test('starts a fresh websocket after stop interrupts a connecting websocket', async () => {
+    const sockets: FakeWebSocket[] = [];
+    const client = new RpcClient({
+      serviceUrl: 'http://127.0.0.1:5173',
+      createWebSocket: (url) => {
+        const socket = new FakeWebSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+      reconnectIntervalMs: 1,
+      reconnectFailureThreshold: 1,
+    });
+
+    void client.start().catch(() => undefined);
+    await waitFor(() => sockets.length === 1);
+
+    client.stop();
+    void client.start().catch(() => undefined);
+    await waitFor(() => sockets.length === 2);
+
+    sockets[1].open();
+    await waitFor(() => sockets[1].sent.length > 0);
+
+    expect(sockets[1].sent[0]).toEqual({ id: 1, method: rpc.app.hello, payload: {} });
     client.stop();
   });
 });

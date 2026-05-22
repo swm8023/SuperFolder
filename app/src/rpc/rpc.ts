@@ -73,6 +73,8 @@ type NotificationHandler = (payload: unknown) => void;
 type StateHandler = (snapshot: RpcClientSnapshot) => void;
 
 const WS_OPEN = 1;
+const WS_CLOSING = 2;
+const WS_CLOSED = 3;
 
 export function createFrontendIdGenerator(): () => number {
   let id = 0;
@@ -148,6 +150,7 @@ export class RpcClient {
   private readyPromise: Promise<BootInfo> | null = null;
   private reconnecting = false;
   private stopped = false;
+  private runVersion = 0;
   private bootInfo: BootInfo | null = null;
   private helloReady = false;
   private latestError: RpcError | null = null;
@@ -205,21 +208,28 @@ export class RpcClient {
     }
 
     this.stopped = false;
+    const runVersion = this.runVersion + 1;
+    this.runVersion = runVersion;
     this.setStatus('loading');
-    this.readyPromise = this.connectUntilReady();
+    this.readyPromise = this.connectUntilReady(runVersion);
     return this.readyPromise;
   }
 
   stop(): void {
     this.stopped = true;
+    this.runVersion += 1;
+    this.readyPromise = null;
+    this.reconnecting = false;
+    this.helloReady = false;
+    const socket = this.socket;
+    this.socket = null;
+    const stopError = createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
+      pending.reject(stopError);
     }
     this.pending.clear();
-    if (this.socket?.readyState === WS_OPEN) {
-      this.socket.close();
-    }
-    this.socket = null;
+    this.closeSocket(socket);
   }
 
   call<TPayload = unknown>(method: RpcMethod, payload: unknown = {}, options: { timeoutMs?: number } = {}): Promise<TPayload> {
@@ -248,18 +258,24 @@ export class RpcClient {
     });
   }
 
-  private async connectUntilReady(): Promise<BootInfo> {
+  private async connectUntilReady(runVersion: number): Promise<BootInfo> {
     let failures = 0;
 
-    while (!this.stopped) {
+    while (this.isActiveRun(runVersion)) {
       try {
-        const boot = await this.connectOnce();
+        const boot = await this.connectOnce(runVersion);
+        if (!this.isActiveRun(runVersion)) {
+          throw createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
+        }
         this.bootInfo = boot;
         this.helloReady = true;
         this.setStatus('connected');
         this.flushQueuedCalls();
         return boot;
       } catch (error) {
+        if (!this.isActiveRun(runVersion)) {
+          break;
+        }
         failures += 1;
         this.setStatus(failures >= this.reconnectFailureThreshold ? 'disconnected' : 'loading');
         if (failures >= this.reconnectFailureThreshold) {
@@ -273,8 +289,8 @@ export class RpcClient {
     throw createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
   }
 
-  private async reconnectLoop(): Promise<void> {
-    if (this.reconnecting || this.stopped) {
+  private async reconnectLoop(runVersion: number): Promise<void> {
+    if (this.reconnecting || !this.isActiveRun(runVersion)) {
       return;
     }
 
@@ -282,9 +298,12 @@ export class RpcClient {
     let failures = 0;
     this.setStatus('reconnecting');
 
-    while (!this.stopped) {
+    while (this.isActiveRun(runVersion)) {
       try {
-        const boot = await this.connectOnce();
+        const boot = await this.connectOnce(runVersion);
+        if (!this.isActiveRun(runVersion)) {
+          break;
+        }
         this.bootInfo = boot;
         this.helloReady = true;
         this.setStatus('connected');
@@ -292,6 +311,9 @@ export class RpcClient {
         this.reconnecting = false;
         return;
       } catch (error) {
+        if (!this.isActiveRun(runVersion)) {
+          break;
+        }
         failures += 1;
         if (failures >= this.reconnectFailureThreshold) {
           this.failAllPending(createRpcError(ERROR_CONNECTION_LOST, 'rpc connection lost'));
@@ -302,17 +324,30 @@ export class RpcClient {
       }
     }
 
-    this.reconnecting = false;
+    if (this.runVersion === runVersion || this.stopped) {
+      this.reconnecting = false;
+    }
   }
 
-  private async connectOnce(): Promise<BootInfo> {
+  private async connectOnce(runVersion: number): Promise<BootInfo> {
     const rpcUrl = resolveRpcUrl(this.serviceUrl);
     const socket = this.createWebSocketImpl(rpcUrl);
+    if (!this.isActiveRun(runVersion)) {
+      this.closeSocket(socket);
+      throw createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
+    }
     this.socket = socket;
     this.bindSocket(socket);
     await this.waitForOpen(socket);
+    if (this.socket !== socket || !this.isActiveRun(runVersion)) {
+      this.closeSocket(socket);
+      throw createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
+    }
     this.bindSocket(socket);
     const hello = await this.call<AppHelloPayload>(rpc.app.hello, {});
+    if (this.socket !== socket || !this.isActiveRun(runVersion)) {
+      throw createRpcError(ERROR_CONNECTION_LOST, 'rpc client stopped');
+    }
     if (!isRecord(hello) || typeof hello.app !== 'string' || typeof hello.headless !== 'boolean') {
       throw new Error('invalid app.hello payload');
     }
@@ -331,9 +366,28 @@ export class RpcClient {
     }
 
     return new Promise((resolve, reject) => {
-      socket.onopen = () => resolve();
-      socket.onclose = () => reject(new Error('websocket closed before open'));
-      socket.onerror = () => reject(new Error('websocket failed before open'));
+      let settled = false;
+      let interval: ReturnType<typeof setInterval> | undefined;
+      const finish = (callback: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (interval) {
+          clearInterval(interval);
+        }
+        callback();
+      };
+      socket.onopen = () => finish(resolve);
+      socket.onclose = () => finish(() => reject(new Error('websocket closed before open')));
+      socket.onerror = () => finish(() => reject(new Error('websocket failed before open')));
+      const checkReadyState = () => {
+        if (socket.readyState === WS_OPEN) {
+          finish(resolve);
+        }
+      };
+      interval = setInterval(checkReadyState, 10);
+      checkReadyState();
     });
   }
 
@@ -394,7 +448,18 @@ export class RpcClient {
     this.socket = null;
     this.helloReady = false;
     this.setStatus('reconnecting');
-    void this.reconnectLoop();
+    void this.reconnectLoop(this.runVersion);
+  }
+
+  private isActiveRun(runVersion: number): boolean {
+    return !this.stopped && this.runVersion === runVersion;
+  }
+
+  private closeSocket(socket: WebSocketLike | null): void {
+    if (!socket || socket.readyState === WS_CLOSING || socket.readyState === WS_CLOSED) {
+      return;
+    }
+    socket.close();
   }
 
   private sendPendingCall(pending: PendingCall): void {

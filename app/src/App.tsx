@@ -62,6 +62,7 @@ export default function App() {
     client
       .start()
       .then(async () => {
+        if (!alive) return;
         const [{ session }, { favorites: loadedFavorites }, { jobs: loadedJobs }] = await Promise.all([
           api.getSession(),
           api.listFavorites(),
@@ -79,7 +80,9 @@ export default function App() {
         const firstTab = activeTab(session.windows[0]?.panes[0]);
         if (firstTab) void refreshGit(firstTab.path);
       })
-      .catch((error) => setLatestError(asRpcError(error)));
+      .catch((error) => {
+        if (alive) setLatestError(asRpcError(error));
+      });
 
     const poll = window.setInterval(() => {
       if (client.status === 'connected') {
