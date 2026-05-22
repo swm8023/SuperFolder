@@ -86,14 +86,17 @@ describe('classifyRpcMessage', () => {
 describe('RpcClient', () => {
   test('runs app.hello before ready, matches completions, and dispatches notifications', async () => {
     let socket: FakeWebSocket | undefined;
+    let fetchCalls = 0;
     const client = new RpcClient({
-      serviceUrl: 'http://127.0.0.1:18080',
+      serviceUrl: 'http://127.0.0.1:5173',
       createWebSocket: (url) => {
         socket = new FakeWebSocket(url);
         return socket;
       },
-      fetch: async () =>
-        new Response(JSON.stringify({ app: 'superfolder', headless: true, rpcUrl: 'ws://127.0.0.1/ws' })),
+      fetch: async () => {
+        fetchCalls += 1;
+        throw new Error('boot should not be fetched');
+      },
       reconnectIntervalMs: 1,
       reconnectFailureThreshold: 3,
     });
@@ -103,12 +106,14 @@ describe('RpcClient', () => {
 
     const ready = client.start();
     await waitFor(() => socket !== undefined);
+    expect(socket?.url).toBe('ws://127.0.0.1:5173/ws');
+    expect(fetchCalls).toBe(0);
     socket?.open();
     await waitFor(() => (socket?.sent.length ?? 0) > 0);
     expect(socket?.sent[0]).toEqual({ id: 1, method: rpc.app.hello, payload: {} });
     socket?.receive({ id: 1, payload: { app: 'superfolder', headless: true } });
 
-    await expect(ready).resolves.toEqual({ app: 'superfolder', headless: true, rpcUrl: 'ws://127.0.0.1/ws' });
+    await expect(ready).resolves.toEqual({ app: 'superfolder', headless: true, rpcUrl: 'ws://127.0.0.1:5173/ws' });
     expect(client.status).toBe('connected');
 
     const session = client.call(rpc.folder.session.get, {});
@@ -123,19 +128,19 @@ describe('RpcClient', () => {
 
   test('fails pending calls with connection_lost when reconnect threshold is reached', async () => {
     let socket: FakeWebSocket | undefined;
-    let fetchCalls = 0;
+    let socketAttempts = 0;
     const client = new RpcClient({
-      serviceUrl: 'http://127.0.0.1:18080',
+      serviceUrl: 'http://127.0.0.1:5173',
       createWebSocket: (url) => {
+        socketAttempts += 1;
+        if (socketAttempts > 1) {
+          throw new Error('offline');
+        }
         socket = new FakeWebSocket(url);
         return socket;
       },
       fetch: async () => {
-        fetchCalls += 1;
-        if (fetchCalls > 1) {
-          throw new Error('offline');
-        }
-        return new Response(JSON.stringify({ app: 'superfolder', headless: true, rpcUrl: 'ws://127.0.0.1/ws' }));
+        throw new Error('boot should not be fetched');
       },
       reconnectIntervalMs: 1,
       reconnectFailureThreshold: 1,

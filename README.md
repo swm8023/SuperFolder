@@ -47,7 +47,8 @@ script\test.bat
 
 开发模式：
 
-- `script\dev.bat` 启动 headless Go service 和 Vite dev server，适合前端调试。
+- `script\dev.bat` 启动 headless Go service 和 Vite dev server，浏览器入口是 `http://127.0.0.1:5173/`。
+- dev 下前端页面和 RPC 都走 Vite 同端口：`http://127.0.0.1:5173/` 与 `ws://127.0.0.1:5173/ws`；Vite 内部把 `/ws` 代理到 Go service。
 - `script\test.bat` 会运行 Go 测试、前端 typecheck/test、正式构建和 headless smoke。
 
 正式构建：
@@ -65,4 +66,4 @@ headless 单独启动入口：
 bin\start-headless.bat 18080
 ```
 
-headless 模式只监听指定端口，不打开 native window；它提供 `/boot` 和同端口 `/ws` RPC 入口。
+headless 模式只监听指定端口，不打开 native window；它在同端口提供 Web 页面、`/healthz` 和 `/ws` RPC 入口。

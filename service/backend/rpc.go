@@ -247,7 +247,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
-	if s.headless || s.staticFS == nil {
+	if s.staticFS == nil {
 		http.NotFound(w, r)
 		return
 	}

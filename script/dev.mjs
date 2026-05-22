@@ -79,7 +79,7 @@ try {
 
   start('npm', ['run', 'dev'], {
     cwd: appDir,
-    env: { ...process.env, VITE_SERVICE_URL: serviceUrl },
+    env: { ...process.env },
   });
   await waitHTTP(viteUrl, 'Vite');
 

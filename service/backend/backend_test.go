@@ -3,10 +3,12 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -137,6 +139,31 @@ func TestHealthAndBootHandlers(t *testing.T) {
 	}
 	if !strings.HasPrefix(boot.RPCURL, "ws://") || !strings.HasSuffix(boot.RPCURL, "/ws") {
 		t.Fatalf("rpcUrl = %q", boot.RPCURL)
+	}
+}
+
+func TestHeadlessServerCanServeStaticWebOnSamePort(t *testing.T) {
+	server := httptest.NewServer(NewServer(ServerOptions{
+		AppName:  "test-app",
+		Headless: true,
+		StaticFS: fstest.MapFS{
+			"index.html": {Data: []byte("<main>SuperFolder</main>")},
+		},
+	}))
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/")
+	if err != nil {
+		t.Fatalf("GET / failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "SuperFolder") {
+		t.Fatalf("GET / status=%d body=%q", resp.StatusCode, string(body))
 	}
 }
 

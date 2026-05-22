@@ -28,6 +28,11 @@ export interface BootInfo {
   rpcUrl: string;
 }
 
+interface AppHelloPayload {
+  app: string;
+  headless: boolean;
+}
+
 export interface RpcClientSnapshot {
   status: RpcStatus;
   boot: BootInfo | null;
@@ -118,11 +123,13 @@ export function classifyRpcMessage(message: unknown): RpcMessageKind {
 }
 
 export function resolveDefaultServiceUrl(): string {
-  const configured = import.meta.env.VITE_SERVICE_URL as string | undefined;
-  if (configured && configured.trim().length > 0) {
-    return configured.replace(/\/$/, '');
-  }
   return window.location.origin;
+}
+
+export function resolveRpcUrl(serviceUrl = resolveDefaultServiceUrl()): string {
+  const url = new URL(serviceUrl);
+  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${url.host}/ws`;
 }
 
 export class RpcClient {
@@ -299,26 +306,17 @@ export class RpcClient {
   }
 
   private async connectOnce(): Promise<BootInfo> {
-    const boot = await this.fetchBoot();
-    const socket = this.createWebSocketImpl(boot.rpcUrl);
+    const rpcUrl = resolveRpcUrl(this.serviceUrl);
+    const socket = this.createWebSocketImpl(rpcUrl);
     this.socket = socket;
     this.bindSocket(socket);
     await this.waitForOpen(socket);
     this.bindSocket(socket);
-    await this.call(rpc.app.hello, {});
-    return boot;
-  }
-
-  private async fetchBoot(): Promise<BootInfo> {
-    const response = await this.fetchImpl(`${this.serviceUrl}/boot`, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`boot failed: ${response.status}`);
+    const hello = await this.call<AppHelloPayload>(rpc.app.hello, {});
+    if (!isRecord(hello) || typeof hello.app !== 'string' || typeof hello.headless !== 'boolean') {
+      throw new Error('invalid app.hello payload');
     }
-    const payload = await response.json();
-    if (!isRecord(payload) || typeof payload.app !== 'string' || typeof payload.headless !== 'boolean' || typeof payload.rpcUrl !== 'string') {
-      throw new Error('invalid boot payload');
-    }
-    return { app: payload.app, headless: payload.headless, rpcUrl: payload.rpcUrl };
+    return { app: hello.app, headless: hello.headless, rpcUrl };
   }
 
   private bindSocket(socket: WebSocketLike): void {

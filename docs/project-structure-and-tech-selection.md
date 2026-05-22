@@ -189,9 +189,9 @@ bin -> source imports
 
 - Go App Host 启动 HTTP/WebSocket 服务。
 - Go App Host 在普通模式创建 WebView2 native window 加载 Web UI。
-- Go App Host 提供 `/boot` 让前端获取同端口 `/ws` RPC 地址。
+- 前端 Web 和 RPC WebSocket 在对外入口上使用同一 origin；前端从当前页面地址推导固定 `/ws` RPC 地址。
 - React/Vite 前端连接 Go 后端。
-- 开发调试使用 headless service：Go service 固定 `127.0.0.1:18080`，Vite 固定 `127.0.0.1:5173`。
+- 开发调试使用 headless service：Go service 固定 `127.0.0.1:18080`，Vite 固定 `127.0.0.1:5173`。浏览器访问 Vite 端口，Vite 将 `/ws`、`/healthz` 代理到 Go service。
 - WebSocket 建立后先完成 `app.hello` handshake。
 - RPC method 定义由 `app/src/rpc/methods.json` 生成，TypeScript 调用侧使用 `rpc.app.hello`、`rpc.folder.session.get` 风格的嵌套 const，Go 调用侧使用 `backend.App.Hello`、`backend.Folder.Session.Get` 风格的命名空间变量。
 - 后端提供会话状态、收藏夹、目录懒加载、菜单、文件操作 Job、Git 摘要和预览 RPC。
