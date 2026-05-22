@@ -1,5 +1,6 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -9,7 +10,26 @@ const appDir = path.join(root, 'app');
 const serviceDir = path.join(root, 'service');
 const serviceUrl = 'http://127.0.0.1:18080';
 const viteUrl = 'http://127.0.0.1:5173/';
+const servicePort = 18080;
+const vitePort = 5173;
 const children = [];
+
+function assertPortFree(port, name) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (error) => {
+      if (error?.code === 'EADDRINUSE') {
+        reject(new Error(`${name} port ${port} is already in use. Stop the existing dev process and run script\\dev.bat again.`));
+        return;
+      }
+      reject(error);
+    });
+    server.once('listening', () => {
+      server.close(() => resolve());
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
 
 function waitHTTP(url, name) {
   return new Promise((resolve, reject) => {
@@ -64,16 +84,27 @@ function shutdown(code = 0) {
   shuttingDown = true;
   for (const child of children) {
     if (!child.killed) {
-      child.kill();
+      killProcessTree(child);
     }
   }
   process.exitCode = code;
+}
+
+function killProcessTree(child) {
+  if (process.platform === 'win32' && child.pid) {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore' });
+    return;
+  }
+  child.kill();
 }
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 try {
+  await assertPortFree(servicePort, 'Go service');
+  await assertPortFree(vitePort, 'Vite');
+
   start('go', ['run', '.', '--headless', '--port', '18080'], { cwd: serviceDir });
   await waitHTTP(`${serviceUrl}/healthz`, 'Go service');
 
